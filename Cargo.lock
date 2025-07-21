@@ -115,6 +115,7 @@ version = "0.1.0"
 dependencies = [
  "argon2",
  "config",
+ "jsonwebtoken",
  "rand_core 0.9.3",
  "rocket",
  "serde",

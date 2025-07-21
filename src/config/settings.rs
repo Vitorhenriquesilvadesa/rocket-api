@@ -1,6 +1,12 @@
 use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
+pub struct Settings {
+    pub surrealdb: SurrealDbConfig,
+    pub jwt: JwtSettings,
+}
+
+#[derive(Deserialize, Debug, Clone)]
 pub struct SurrealDbConfig {
     pub host: String,
     pub username: String,
@@ -9,7 +15,8 @@ pub struct SurrealDbConfig {
     pub database: String,
 }
 
-#[derive(Deserialize, Debug)]
-pub struct Settings {
-    pub surrealdb: SurrealDbConfig,
+#[derive(Debug, Clone, Deserialize)]
+pub struct JwtSettings {
+    pub secret: String,
+    pub expiration_millis: i64,
 }

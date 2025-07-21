@@ -1,38 +1,27 @@
 use argon2::{
-    Argon2,
-    password_hash::{PasswordHasher, SaltString, rand_core::OsRng},
+    Argon2, PasswordVerifier,
+    password_hash::{PasswordHash as PH, PasswordHasher, SaltString, rand_core::OsRng},
 };
 use serde::{Deserialize, Serialize};
 use surrealdb::sql::Thing;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
-    #[serde(deserialize_with = "thing_to_user_id")]
-    pub id: UserId,
-    pub username: Username,
+    #[serde(deserialize_with = "deserialize_thing_id")]
+    pub id: String,
+    pub username: String,
+    pub email: String,
     pub password: PasswordHash,
 }
 
 impl User {
-    pub fn new(id: UserId, username: Username, password: PasswordHash) -> Self {
+    pub fn new(id: String, username: String, email: String, password: PasswordHash) -> Self {
         Self {
             id,
             username,
+            email,
             password,
         }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct UserId(String);
-
-impl UserId {
-    pub fn new(inner: String) -> Self {
-        Self(inner)
-    }
-
-    pub fn to_string(self) -> String {
-        self.0
     }
 }
 
@@ -59,57 +48,16 @@ impl PasswordHash {
         Ok(PasswordHash(password_hash))
     }
 
+    pub fn verify(&self, raw_password: &str) -> bool {
+        let parsed_hash = PH::new(&self.0).unwrap();
+        match Argon2::default().verify_password(raw_password.as_bytes(), &parsed_hash) {
+            Ok(_) => true,
+            Err(_) => false,
+        }
+    }
+
     pub fn as_str(&self) -> &str {
         &self.0
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Username(String);
-
-impl Username {
-    pub fn new(username: String) -> Self {
-        Self(username)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Password(String);
-
-impl Password {
-    pub fn new(inner: String) -> Self {
-        Self(inner)
-    }
-}
-
-impl Into<String> for Password {
-    fn into(self) -> String {
-        self.0
-    }
-}
-
-impl Serialize for UserId {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(&self.0)
-    }
-}
-
-impl<'da> Deserialize<'da> for UserId {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'da>,
-    {
-        let s = String::deserialize(deserializer)?;
-        Ok(UserId::new(s))
-    }
-}
-
-impl Into<String> for UserId {
-    fn into(self) -> String {
-        self.0
     }
 }
 
@@ -132,54 +80,13 @@ impl<'da> Deserialize<'da> for PasswordHash {
     }
 }
 
-impl Serialize for Username {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(&self.0)
-    }
-}
-
-impl<'da> Deserialize<'da> for Username {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'da>,
-    {
-        let s = String::deserialize(deserializer)?;
-        Ok(Username::new(s))
-    }
-}
-
-impl Serialize for Password {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(&self.0)
-    }
-}
-
-impl<'da> Deserialize<'da> for Password {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'da>,
-    {
-        let s = String::deserialize(deserializer)?;
-        Ok(Password::new(s))
-    }
-}
-
-fn thing_to_user_id<'de, D>(deserializer: D) -> Result<UserId, D::Error>
+fn deserialize_thing_id<'de, D>(deserializer: D) -> Result<String, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
     let thing = Thing::deserialize(deserializer)?;
-    Ok(UserId(thing.id.to_string()))
-}
-
-impl From<Thing> for UserId {
-    fn from(thing: Thing) -> Self {
-        UserId(format!("{}:{}", thing.tb, thing.id))
+    match thing.id {
+        surrealdb::sql::Id::String(s) => Ok(s),
+        _ => Err(serde::de::Error::custom("Expected string ID")),
     }
 }
