@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use jsonwebtoken::{EncodingKey, Header, encode};
-use rocket::time::{Duration, UtcDateTime};
+use rocket::time::UtcDateTime;
 
 use crate::{
     auth::jwt::{Claims, JwtAuthenticationError, validate_jwt},

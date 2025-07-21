@@ -1,13 +1,17 @@
+use std::collections::HashSet;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use config::ConfigError;
 use rocket::Build;
 use rocket::Config;
 use rocket::Rocket;
+use rocket_cors::AllowedHeaders;
+use rocket_cors::AllowedOrigins;
+use rocket_cors::Method;
 use thiserror::Error;
 
 use crate::api::routes::get_routes;
-use crate::api::routes::user::*;
 use crate::auth::service::AuthService;
 use crate::config::load_settings;
 use crate::core::user::service::UserService;
@@ -20,8 +24,12 @@ pub type AppRocket = Rocket<Build>;
 pub enum ApplicationError {
     #[error("Failed to connect database: {0}")]
     DatabaseConnection(String),
+
     #[error("Failed to parse configuration file")]
     ConfigurationParsing(ConfigError),
+
+    #[error("Failed to create CORS configuration")]
+    CorsConfiguration(String),
 }
 
 pub async fn build_app() -> Result<AppRocket, ApplicationError> {
@@ -38,12 +46,44 @@ pub async fn build_app() -> Result<AppRocket, ApplicationError> {
 
     let auth_service = Arc::new(AuthService::new(Arc::clone(&user_service), cfg.jwt.clone()));
 
+    let allowed_origins = AllowedOrigins::some_exact(&cfg.server.allowed_origins);
+    let allowed_headers = AllowedHeaders::some(&[
+        "Authorization",
+        "Accept",
+        "Content-Type",
+        "X-Requested-With",
+    ]);
+
+    let allowed_methods: HashSet<Method> = cfg
+        .server
+        .allowed_methods
+        .iter()
+        .map(|s| Method::from_str(s))
+        .collect::<Result<HashSet<Method>, _>>()
+        .map_err(|e| {
+            ApplicationError::CorsConfiguration(format!("Invalid HTTP method in config: {:?}", e))
+        })?;
+
+    let cors = rocket_cors::CorsOptions {
+        allowed_origins,
+        allowed_headers,
+        allow_credentials: true,
+        allowed_methods,
+        ..Default::default()
+    }
+    .to_cors()
+    .map_err(|e| {
+        ApplicationError::CorsConfiguration(format!("CORS config error: {:?}", e.to_string()))
+    })?;
+
     Ok(rocket::custom(Config {
-        port: 5173,
+        port: cfg.server.port,
+        address: cfg.server.address,
         ..Default::default()
     })
     .manage(Arc::clone(&user_service))
     .manage(Arc::clone(&auth_service))
     .manage(cfg)
-    .mount("/api", get_routes()))
+    .mount("/api", get_routes())
+    .attach(cors))
 }

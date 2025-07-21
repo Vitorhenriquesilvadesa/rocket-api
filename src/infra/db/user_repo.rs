@@ -55,7 +55,7 @@ impl UserRepository for SurrealUserRepository {
 
         let mut response = match self.client.query(query).await {
             Ok(resp) => resp,
-            Err(e) => {
+            Err(_) => {
                 return None;
             }
         };
