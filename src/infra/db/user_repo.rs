@@ -25,10 +25,29 @@ impl SurrealUserRepository {
 #[async_trait]
 impl UserRepository for SurrealUserRepository {
     async fn get_by_id(&self, id: String) -> Option<User> {
-        match self.client.select(id.to_string()).await {
+        let id = format!("users:{}", id);
+        let query = format!("SELECT * FROM users WHERE id = {} LIMIT 1;", id);
+
+        let mut response = match self
+            .client
+            .query(query)
+            .await
+            .map_err(|e| UserRepositoryError::QueryFailed(e.to_string()))
+        {
+            Ok(res) => res,
+            Err(e) => {
+                println!("{:?}", e);
+
+                return None;
+            }
+        };
+
+        let user: Option<User> = match response.take(0).map_err(|_| UserRepositoryError::NotFound) {
+            Ok(u) => u,
             Err(_) => None,
-            Ok(mut users) => users.pop(),
-        }
+        };
+
+        user
     }
 
     async fn get_by_email(&self, email: &str) -> Option<User> {
@@ -36,7 +55,9 @@ impl UserRepository for SurrealUserRepository {
 
         let mut response = match self.client.query(query).await {
             Ok(resp) => resp,
-            Err(_) => return None,
+            Err(e) => {
+                return None;
+            }
         };
 
         let users: Vec<User> = response.take(0).ok()?;

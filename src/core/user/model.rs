@@ -5,6 +5,8 @@ use argon2::{
 use serde::{Deserialize, Serialize};
 use surrealdb::sql::Thing;
 
+use crate::auth::roles::Role;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
     #[serde(deserialize_with = "deserialize_thing_id")]
@@ -12,15 +14,23 @@ pub struct User {
     pub username: String,
     pub email: String,
     pub password: PasswordHash,
+    pub roles: Vec<Role>,
 }
 
 impl User {
-    pub fn new(id: String, username: String, email: String, password: PasswordHash) -> Self {
+    pub fn new(
+        id: String,
+        username: String,
+        email: String,
+        password: PasswordHash,
+        roles: Vec<Role>,
+    ) -> Self {
         Self {
             id,
             username,
             email,
             password,
+            roles,
         }
     }
 }

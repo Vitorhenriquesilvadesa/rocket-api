@@ -18,5 +18,5 @@ pub struct SurrealDbConfig {
 #[derive(Debug, Clone, Deserialize)]
 pub struct JwtSettings {
     pub secret: String,
-    pub expiration_millis: i64,
+    pub expiration: i64,
 }

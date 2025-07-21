@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use crate::{
     api::requests::PageConfig,
+    auth::roles::Role,
     core::user::{
         dto::{NewUser, UpdateUser},
         error::UserServiceError,
@@ -24,6 +25,7 @@ impl UserService {
         username: String,
         email: String,
         raw_password: String,
+        roles: Vec<Role>,
     ) -> Result<User, UserServiceError> {
         let password_hash = PasswordHash::raw(raw_password)
             .map_err(|e| UserServiceError::PasswordHashError(e.to_string()))?;
@@ -32,6 +34,7 @@ impl UserService {
             username,
             email,
             password: password_hash.as_str().to_string(),
+            roles,
         };
 
         let user = self.repo.create(new_user).await.map_err(|e| e.into())?;
@@ -71,6 +74,10 @@ impl UserService {
         }
 
         Ok(user)
+    }
+
+    pub async fn find_by_id(&self, id: String) -> Option<User> {
+        self.repo.get_by_id(id).await
     }
 }
 

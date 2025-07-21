@@ -24,6 +24,7 @@ pub async fn create_user(
             new_user.username.clone(),
             new_user.email.clone(),
             new_user.password.clone(),
+            new_user.roles.clone(),
         )
         .await
         .map(|user| {

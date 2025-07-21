@@ -1,10 +1,13 @@
 use serde::{Deserialize, Serialize};
 
+use crate::auth::roles::Role;
+
 #[derive(Serialize, Deserialize)]
 pub struct NewUser {
     pub username: String,
     pub email: String,
     pub password: String,
+    pub roles: Vec<Role>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

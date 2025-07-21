@@ -1,17 +1,21 @@
+use std::sync::Arc;
+
 use jsonwebtoken::{DecodingKey, Validation, decode, errors::ErrorKind};
-use rocket::{Request, async_trait, http::Status, request::FromRequest};
+use rocket::{Request, async_trait, http::Status};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::{
     api::middleware::Middleware,
-    config::settings::{JwtSettings, Settings},
+    auth::{roles::Role, service::AuthService},
+    config::settings::JwtSettings,
 };
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
     pub sub: String,
     pub exp: usize,
+    pub roles: Vec<Role>,
 }
 
 #[derive(Debug)]
@@ -37,20 +41,16 @@ impl Middleware for JwtAuthentication {
     type Error = JwtAuthenticationError;
 
     async fn from_request(request: &Request<'_>) -> Result<Self, (Status, Self::Error)> {
-        let settings = &request
+        let auth_service = request
             .rocket()
-            .state::<Settings>()
-            .ok_or((
-                Status::InternalServerError,
-                JwtAuthenticationError::Unauthorized,
-            ))?
-            .jwt;
+            .state::<Arc<AuthService>>()
+            .ok_or((Status::Unauthorized, JwtAuthenticationError::Unauthorized))?;
 
         let auth_header = request.headers().get_one("Authorization");
 
         if let Some(auth_header) = auth_header {
             if let Some(token) = auth_header.strip_prefix("Bearer ") {
-                match validate_jwt(token, settings) {
+                match auth_service.validate_token(token).await {
                     Ok(claims) => Ok(Self(claims)),
                     Err(e) => Err((Status::Unauthorized, e)),
                 }

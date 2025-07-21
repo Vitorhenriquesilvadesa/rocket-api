@@ -30,12 +30,13 @@ impl AuthService {
     }
 
     pub fn generate_jwt(&self, user: &User) -> Result<String, jsonwebtoken::errors::Error> {
-        let now = UtcDateTime::now().millisecond();
-        let exp = now as i128 + Duration::minutes(self.jwt.expiration_millis).whole_milliseconds();
+        let now = UtcDateTime::now().unix_timestamp();
+        let exp = now + self.jwt.expiration;
 
         let claims = Claims {
             exp: exp as usize,
             sub: user.id.clone(),
+            roles: user.roles.clone(),
         };
 
         let token = encode(
@@ -47,7 +48,12 @@ impl AuthService {
         Ok(token)
     }
 
-    pub fn validate_token(&self, token: &str) -> Result<Claims, JwtAuthenticationError> {
-        validate_jwt(token, &self.jwt)
+    pub async fn validate_token(&self, token: &str) -> Result<Claims, JwtAuthenticationError> {
+        let claims = validate_jwt(token, &self.jwt)?;
+
+        match self.user_service.find_by_id(claims.sub.clone()).await {
+            Some(_) => Ok(claims),
+            None => Err(JwtAuthenticationError::Unauthorized),
+        }
     }
 }

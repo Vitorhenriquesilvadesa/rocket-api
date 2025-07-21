@@ -7,11 +7,14 @@ use crate::{
         middleware::MiddlewareGuard,
         requests::auth_reqs::{LoginRequest, LoginResponse},
     },
-    auth::{jwt::JwtAuthentication, service::AuthService},
+    auth::{
+        jwt::JwtAuthentication, role_middleware::RoleAuthorization, roles::Admin,
+        service::AuthService,
+    },
 };
 
 pub fn routes() -> Vec<Route> {
-    rocket::routes![login, me]
+    rocket::routes![login, me, admin]
 }
 
 #[post("/auth", data = "<credentials>")]
@@ -30,4 +33,12 @@ async fn login(
 #[get("/me")]
 async fn me(auth: MiddlewareGuard<JwtAuthentication>) -> String {
     format!("Usuário autenticado: {:?}", auth.0)
+}
+
+#[get("/admin")]
+async fn admin(
+    _jwt: MiddlewareGuard<JwtAuthentication>,
+    _auth: MiddlewareGuard<RoleAuthorization<Admin>>,
+) -> String {
+    format!("Usuário autenticado")
 }
