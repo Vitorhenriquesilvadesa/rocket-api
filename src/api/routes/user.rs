@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use rocket::{self, Route, State, delete, get, http::Status, post, put, serde::json::Json};
+use tracing::{debug, error, info, instrument};
 
 use crate::{
     api::{
@@ -14,11 +15,18 @@ pub fn routes() -> Vec<Route> {
     rocket::routes![create_user, get_all_users, delete_user, update_user]
 }
 
+#[instrument(
+    name = "create_user_request",
+    skip(new_user, user_service),
+    fields(user_email = %new_user.email, user_username = %new_user.username)
+)]
 #[post("/users", data = "<new_user>")]
 pub async fn create_user(
     new_user: Json<CreateUserRequest>,
     user_service: &State<Arc<UserService>>,
 ) -> Result<Json<CreateUserResponse>, Status> {
+    info!("Initializing new user creation");
+
     user_service
         .create_user(
             new_user.username.clone(),
@@ -28,17 +36,25 @@ pub async fn create_user(
         )
         .await
         .map(|user| {
+            info!(user_id = %user.id, "User created successful.");
+
             Json(CreateUserResponse {
                 id: user.id,
                 username: user.username,
             })
         })
         .map_err(|e| {
-            println!("{:?}", e);
+            error!("Failed to create user: {:?}", e);
+
             Status::InternalServerError
         })
 }
 
+#[instrument(
+    name = "get_all_users", 
+    skip(user_service, spec), 
+    fields(page = %spec.page.unwrap_or(1), per_page = %spec.per_page.unwrap_or(10))
+)]
 #[get("/users?<spec..>")]
 async fn get_all_users(
     spec: PageConfig,
@@ -47,8 +63,11 @@ async fn get_all_users(
     let users = user_service
         .list_users(spec)
         .await
-        .map_err(|_| Status::NotFound)?;
+        .map_err(|_| {
+            error!("Error to get users.");
+            Status::NotFound})?;
 
+    debug!("Successful to get users.");
     Ok(Json(users))
 }
 

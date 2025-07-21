@@ -4,7 +4,8 @@ extern crate rocket;
 
 #[rocket::main]
 async fn main() -> Result<(), rocket::Error> {
-    telemetry::init();
+    dotenvy::dotenv().expect("Failed to load .env file");
+    let guard = telemetry::init();
 
     match build_app().await {
         Ok(app) => app.launch().await?,
@@ -12,6 +13,8 @@ async fn main() -> Result<(), rocket::Error> {
             panic!("{}", e);
         }
     };
+
+    drop(guard);
 
     Ok(())
 }
