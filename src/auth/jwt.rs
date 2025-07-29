@@ -46,20 +46,17 @@ impl Middleware for JwtAuthentication {
             .state::<Arc<AuthService>>()
             .ok_or((Status::Unauthorized, JwtAuthenticationError::Unauthorized))?;
 
-        let auth_header = request.headers().get_one("Authorization");
+        let token = request
+            .headers()
+            .get_one("Authorization")
+            .and_then(|h| h.strip_prefix("Bearer "))
+            .ok_or((Status::Unauthorized, JwtAuthenticationError::MissingToken))?;
 
-        if let Some(auth_header) = auth_header {
-            if let Some(token) = auth_header.strip_prefix("Bearer ") {
-                match auth_service.validate_token(token).await {
-                    Ok(claims) => Ok(Self(claims)),
-                    Err(e) => Err((Status::Unauthorized, e)),
-                }
-            } else {
-                return Err((Status::Unauthorized, JwtAuthenticationError::MissingToken));
-            }
-        } else {
-            return Err((Status::Unauthorized, JwtAuthenticationError::MissingToken));
-        }
+        auth_service
+            .validate_token(token)
+            .await
+            .map(Self)
+            .map_err(|e| (Status::Unauthorized, e))
     }
 }
 

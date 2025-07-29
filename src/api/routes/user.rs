@@ -5,8 +5,8 @@ use tracing::{debug, error, info, instrument};
 
 use crate::{
     api::{
-        requests::{PageConfig, user_reqs::CreateUserRequest},
-        responses::user::CreateUserResponse,
+        requests::{user_reqs::CreateUserRequest, PageConfig},
+        responses::user::{CreateUserResponse, UserDTO},
     },
     core::user::{dto::UpdateUser, model::User, service::UserService},
 };
@@ -59,26 +59,30 @@ pub async fn create_user(
 async fn get_all_users(
     spec: PageConfig,
     user_service: &State<Arc<UserService>>,
-) -> Result<Json<Vec<User>>, Status> {
+) -> Result<Json<Vec<UserDTO>>, Status> {
     let users = user_service
         .list_users(spec)
         .await
         .map_err(|_| {
             error!("Error to get users.");
-            Status::NotFound})?;
+            Status::NotFound})?.into_iter().map(|e| UserDTO {
+                email: e.email,
+                username: e.username,
+                roles: e.roles,
+
+            }).collect();
 
     debug!("Successful to get users.");
     Ok(Json(users))
 }
 
+#[instrument(name="delete_user", skip(user_service), fields(id = id))]
 #[delete("/users?<id>")]
 async fn delete_user(id: String, user_service: &State<Arc<UserService>>) -> Status {
-    match user_service.delete_user(id).await {
-        Err(_) => Status::NotFound,
-        Ok(_) => Status::NoContent,
-    }
+    user_service.delete_user(id).await.map(|_| Status::NoContent).unwrap_or(Status::NotFound)
 }
 
+#[instrument(name="update_user", skip(user_service), fields(username = user_data.username, email = user_data.email))]
 #[put("/users?<id>", data = "<user_data>")]
 async fn update_user(
     id: String,

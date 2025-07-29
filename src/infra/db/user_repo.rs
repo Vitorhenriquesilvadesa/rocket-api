@@ -2,6 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use rocket::async_trait;
 use surrealdb::{Surreal, engine::remote::ws::Client};
+use tracing::error;
 
 use crate::{
     api::requests::PageConfig,
@@ -25,41 +26,28 @@ impl SurrealUserRepository {
 #[async_trait]
 impl UserRepository for SurrealUserRepository {
     async fn get_by_id(&self, id: String) -> Option<User> {
-        let id = format!("users:{}", id);
-        let query = format!("SELECT * FROM users WHERE id = {} LIMIT 1;", id);
+        let id = format!("users:{id}");
+        let query = format!("SELECT * FROM users WHERE id = {id} LIMIT 1;");
 
-        let mut response = match self
+        let mut response = self
             .client
             .query(query)
             .await
             .map_err(|e| UserRepositoryError::QueryFailed(e.to_string()))
-        {
-            Ok(res) => res,
-            Err(e) => {
-                println!("{:?}", e);
+            .inspect_err(|e| error!("{:?}", e))
+            .ok()?;
 
-                return None;
-            }
-        };
-
-        let user: Option<User> = match response.take(0).map_err(|_| UserRepositoryError::NotFound) {
-            Ok(u) => u,
-            Err(_) => None,
-        };
+        let user: Option<User> = response
+            .take(0)
+            .map_err(|_| UserRepositoryError::NotFound)
+            .ok()?;
 
         user
     }
 
     async fn get_by_email(&self, email: &str) -> Option<User> {
-        let query = format!("SELECT * FROM users WHERE email = '{}' LIMIT 1", email);
-
-        let mut response = match self.client.query(query).await {
-            Ok(resp) => resp,
-            Err(_) => {
-                return None;
-            }
-        };
-
+        let query = format!("SELECT * FROM users WHERE email = '{email}' LIMIT 1");
+        let mut response = self.client.query(query).await.ok()?;
         let users: Vec<User> = response.take(0).ok()?;
 
         users.into_iter().next()
@@ -73,9 +61,11 @@ impl UserRepository for SurrealUserRepository {
             .await
             .map_err(|e| UserRepositoryError::DatabaseError(e.to_string()))?;
 
-        let created_user = response.take();
+        let created_user = response.take().ok_or(UserRepositoryError::QueryFailed(
+            "User creation failed".into(),
+        ))?;
 
-        Ok(created_user.unwrap())
+        Ok(created_user)
     }
 
     async fn update(&self, id: String, data: UpdateUser) -> Result<User, UserRepositoryError> {
@@ -86,7 +76,7 @@ impl UserRepository for SurrealUserRepository {
         }
 
         if let Some(password) = data.password {
-            let password = PasswordHash::raw(password.into())
+            let password = PasswordHash::raw(password)
                 .map_err(|e| UserRepositoryError::QueryFailed(e.to_string()))?;
 
             let password = password.as_str();
@@ -101,25 +91,17 @@ impl UserRepository for SurrealUserRepository {
             .await
             .map_err(|e| UserRepositoryError::DatabaseError(e.to_string()))?;
 
-        let user = match user {
-            Some(v) => v,
-            None => return Err(UserRepositoryError::NotFound),
-        };
+        let user = user.ok_or(UserRepositoryError::NotFound)?;
 
         Ok(user)
     }
 
     async fn delete(&self, id: String) -> Result<(), UserRepositoryError> {
-        let response: Option<User> = self
-            .client
+        self.client
             .delete(("users", id.to_string()))
             .await
-            .map_err(|e| UserRepositoryError::QueryFailed(e.to_string()))?;
-
-        match response {
-            None => Err(UserRepositoryError::NotFound),
-            Some(_) => Ok(()),
-        }
+            .map_err(|e| UserRepositoryError::QueryFailed(e.to_string()))?
+            .ok_or(UserRepositoryError::NotFound)
     }
 
     async fn list(&self, spec: PageConfig) -> Result<Vec<User>, UserRepositoryError> {
@@ -127,7 +109,7 @@ impl UserRepository for SurrealUserRepository {
         let per_page = spec.per_page.unwrap_or(10);
         let start = (page - 1) * per_page;
 
-        let query = format!("SELECT * FROM users START {} LIMIT {}", start, per_page);
+        let query = format!("SELECT * FROM users START {start} LIMIT {per_page}");
 
         let mut response = self
             .client

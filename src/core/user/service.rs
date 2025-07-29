@@ -37,13 +37,13 @@ impl UserService {
             roles,
         };
 
-        let user = self.repo.create(new_user).await.map_err(|e| e.into())?;
+        let user = self.repo.create(new_user).await?;
 
         Ok(user)
     }
 
     pub async fn list_users(&self, spec: PageConfig) -> Result<Vec<User>, UserServiceError> {
-        let users = self.repo.list(spec).await.map_err(|e| e.into())?;
+        let users = self.repo.list(spec).await?;
         Ok(users)
     }
 
@@ -64,10 +64,11 @@ impl UserService {
         email: String,
         raw_password: String,
     ) -> Result<User, UserServiceError> {
-        let user = match self.repo.get_by_email(&email).await {
-            Some(user) => user,
-            None => return Err(UserServiceError::UserNotFound),
-        };
+        let user = self
+            .repo
+            .get_by_email(&email)
+            .await
+            .ok_or(UserServiceError::UserNotFound)?;
 
         if !user.password.verify(&raw_password) {
             return Err(UserServiceError::UserNotFound);
@@ -81,9 +82,9 @@ impl UserService {
     }
 }
 
-impl Into<UserServiceError> for UserRepositoryError {
-    fn into(self) -> UserServiceError {
-        match self {
+impl From<UserRepositoryError> for UserServiceError {
+    fn from(val: UserRepositoryError) -> Self {
+        match val {
             UserRepositoryError::DatabaseError(err) => UserServiceError::RepositoryError(err),
             UserRepositoryError::NotFound => UserServiceError::UserNotFound,
             UserRepositoryError::Unknown => UserServiceError::Unknown,

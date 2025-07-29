@@ -33,6 +33,7 @@ async fn login(
     Ok(Json(LoginResponse { token }))
 }
 
+#[instrument(name = "protected_me", skip(auth))]
 #[get("/me")]
 async fn me(auth: MiddlewareGuard<JwtAuthentication>) -> String {
     format!("Usuário autenticado: {:?}", auth.0)

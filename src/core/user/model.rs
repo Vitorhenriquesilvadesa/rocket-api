@@ -59,9 +59,10 @@ impl PasswordHash {
     }
 
     pub fn verify(&self, raw_password: &str) -> bool {
-        let parsed_hash = PH::new(&self.0).unwrap();
-        match Argon2::default().verify_password(raw_password.as_bytes(), &parsed_hash) {
-            Ok(_) => true,
+        match PH::new(&self.0) {
+            Ok(parsed_hash) => Argon2::default()
+                .verify_password(raw_password.as_bytes(), &parsed_hash)
+                .is_ok(),
             Err(_) => false,
         }
     }
@@ -95,8 +96,9 @@ where
     D: serde::Deserializer<'de>,
 {
     let thing = Thing::deserialize(deserializer)?;
-    match thing.id {
-        surrealdb::sql::Id::String(s) => Ok(s),
-        _ => Err(serde::de::Error::custom("Expected string ID")),
+    if let surrealdb::sql::Id::String(s) = thing.id {
+        Ok(s)
+    } else {
+        Err(serde::de::Error::custom("Expected string ID"))
     }
 }

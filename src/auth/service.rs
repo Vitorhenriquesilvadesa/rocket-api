@@ -26,7 +26,7 @@ impl AuthService {
             .await
             .map_err(|_| ())?;
 
-        Ok(self.generate_jwt(&user).map_err(|_| ())?)
+        self.generate_jwt(&user).map_err(|_| ())
     }
 
     pub fn generate_jwt(&self, user: &User) -> Result<String, jsonwebtoken::errors::Error> {
@@ -51,9 +51,10 @@ impl AuthService {
     pub async fn validate_token(&self, token: &str) -> Result<Claims, JwtAuthenticationError> {
         let claims = validate_jwt(token, &self.jwt)?;
 
-        match self.user_service.find_by_id(claims.sub.clone()).await {
-            Some(_) => Ok(claims),
-            None => Err(JwtAuthenticationError::Unauthorized),
-        }
+        self.user_service
+            .find_by_id(claims.sub.clone())
+            .await
+            .map(|_| claims)
+            .ok_or(JwtAuthenticationError::Unauthorized)
     }
 }

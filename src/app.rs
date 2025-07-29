@@ -33,12 +33,7 @@ pub enum ApplicationError {
 }
 
 pub async fn build_app() -> Result<AppRocket, ApplicationError> {
-    let cfg = load_settings();
-
-    let cfg = match cfg {
-        Err(e) => return Err(ApplicationError::ConfigurationParsing(e)),
-        Ok(c) => c,
-    };
+    let cfg = load_settings().map_err(ApplicationError::ConfigurationParsing)?;
 
     let database_conn = create_surreal_client(&cfg.surrealdb).await?;
     let user_repo = SurrealUserRepository::new(Arc::clone(&database_conn));
@@ -61,7 +56,7 @@ pub async fn build_app() -> Result<AppRocket, ApplicationError> {
         .map(|s| Method::from_str(s))
         .collect::<Result<HashSet<Method>, _>>()
         .map_err(|e| {
-            ApplicationError::CorsConfiguration(format!("Invalid HTTP method in config: {:?}", e))
+            ApplicationError::CorsConfiguration(format!("Invalid HTTP method in config: {e:?}"))
         })?;
 
     let cors = rocket_cors::CorsOptions {
